@@ -2,6 +2,7 @@ const TRPG_SPREADSHEET_ID = '1OYLMOUWbP8e8Xww-Yq5W_dXHzWm7HZqWHYiZFVhrbrg';
 const TRPG_COMMAND_SHEET = 'TRPG_COMMANDS';
 const TRPG_CHARACTER_SHEET = 'TRPG_CHARACTERS';
 const TOKEN_PROPERTY = 'TRPG_WRITE_TOKEN';
+const GEMINI_KEY_PROPERTY = 'TRPG_GEMINI_API_KEY';
 
 function doGet() {
   return json_({ ok: true, service: 'TRPG Window Sheet Writer' });
@@ -15,6 +16,7 @@ function doPost(event) {
     validateRequest_(request);
     lock.waitLock(10000);
     const book = SpreadsheetApp.openById(TRPG_SPREADSHEET_ID);
+    if (request.action === 'geminiChat') return json_(geminiChat_(request));
     if (request.action === 'readPendingCommands') {
       const commandSheet = book.getSheetByName(TRPG_COMMAND_SHEET);
       if (!commandSheet) throw new Error('TRPG_COMMANDS 탭을 찾을 수 없습니다.');
@@ -66,6 +68,20 @@ function configureWriteToken() {
   ui.alert('쓰기 토큰을 저장했습니다.');
 }
 
+function configureGeminiApiKey() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    'Gemini API 키 설정',
+    'Google AI Studio에서 만든 Gemini API 키를 입력하세요. 키는 Script Properties에만 저장되며 웹앱으로 전송되지 않습니다.',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  const key = response.getResponseText().trim();
+  if (key.length < 20) throw new Error('Gemini API 키 형식이 올바르지 않습니다.');
+  PropertiesService.getScriptProperties().setProperty(GEMINI_KEY_PROPERTY, key);
+  ui.alert('Gemini API 키를 안전한 Script Properties에 저장했습니다.');
+}
+
 function authorize_(token) {
   const expected = PropertiesService.getScriptProperties().getProperty(TOKEN_PROPERTY);
   if (!expected) throw new Error('Apps Script 쓰기 토큰이 설정되지 않았습니다.');
@@ -76,12 +92,37 @@ function validateRequest_(request) {
   if (request.spreadsheetId !== TRPG_SPREADSHEET_ID) throw new Error('허용되지 않은 스프레드시트입니다.');
   const expectedSheet = request.action === 'upsertCharacter' ? TRPG_CHARACTER_SHEET : TRPG_COMMAND_SHEET;
   if (request.sheetName !== expectedSheet) throw new Error('허용되지 않은 시트 탭입니다.');
-  if (['readPendingCommands', 'updateCommandStatus'].includes(request.action)) {
+  if (['readPendingCommands', 'updateCommandStatus', 'geminiChat'].includes(request.action)) {
     if (request.action === 'updateCommandStatus' && !String(request.commandId || '').trim()) throw new Error('command_id가 필요합니다.');
+    if (request.action === 'geminiChat' && !String(request.message || '').trim()) throw new Error('플레이어 메시지가 필요합니다.');
     return;
   }
   const id = String(request.characterId || '').trim();
   if (!/^character_[a-z0-9_]+$/i.test(id)) throw new Error('캐릭터 ID 형식이 올바르지 않습니다.');
+}
+
+function geminiChat_(request) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty(GEMINI_KEY_PROPERTY);
+  if (!apiKey) throw new Error('Gemini API 키가 설정되지 않았습니다. Apps Script에서 configureGeminiApiKey를 실행하세요.');
+  const allowedCommands = ['upsert_character','set_speakers','grant_equipment','grant_essence','grant_inventory','remove_inventory','award_experience','increase_stats','increase_special_stats','set_trait','set_state'];
+  const systemPrompt = `당신은 중세 판타지 TRPG CHRONICLE의 공정하고 생생한 게임 마스터다. 플레이어 선택의 결과를 서술하고, NPC의 성격과 장기기억을 일관되게 유지한다. 응답은 반드시 JSON 객체 하나만 반환한다. 형식은 {"messages":[{"type":"gm|npc|system","speakerId":"NPC id 또는 빈 문자열","speakerName":"이름 또는 빈 문자열","text":"대사 또는 진행문","action":"행동 묘사 또는 빈 문자열"}],"commands":[{"command_type":"명령","payload":{}}]}다. GM 일반 진행은 gm, NPC의 말과 행동은 npc로 분리한다. 플레이어의 대사를 대신 결정하지 않는다. 상태가 실제로 변할 때만 commands를 만든다. 사용할 수 있는 명령은 ${allowedCommands.join(', ')}뿐이다. 새 NPC는 upsert_character로 먼저 등록하고 같은 응답의 npc 메시지에서 동일 id를 사용한다. 위치와 지도는 자동으로 변경하지 않는다. 게임 상태를 통째로 덮어쓰지 말고 가능한 한 작은 명령을 사용한다. GM 규칙: ${String(request.gmRules || '기본 CHRONICLE 규칙을 따른다.').slice(0,12000)} 시트/명령 규칙: ${String(request.sheetRules || '').slice(0,8000)}`;
+  const context = JSON.stringify({ gameState: request.gameState || {}, recentHistory: request.history || [], playerMessage: request.message });
+  const response = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-goog-api-key': apiKey },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: systemPrompt + '\n\n현재 입력:\n' + context }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.85, maxOutputTokens: 4096 } })
+  });
+  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) throw new Error('Gemini API 오류: ' + response.getContentText().slice(0,500));
+  const raw = JSON.parse(response.getContentText());
+  const text = (((raw.candidates || [])[0] || {}).content?.parts || []).map(part => part.text || '').join('').trim();
+  if (!text) throw new Error('Gemini가 빈 응답을 반환했습니다.');
+  let result;
+  try { result = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch (error) { throw new Error('Gemini 응답 JSON을 해석할 수 없습니다.'); }
+  result.messages = Array.isArray(result.messages) ? result.messages.slice(0,12) : [];
+  result.commands = (Array.isArray(result.commands) ? result.commands : []).filter(command => allowedCommands.includes(String(command.command_type || command.type || '').toLowerCase())).slice(0,20);
+  return { ok: true, messages: result.messages, commands: result.commands };
 }
 
 function pendingCommands_(sheet) {
