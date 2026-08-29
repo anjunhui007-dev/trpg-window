@@ -12,9 +12,19 @@ function doPost(event) {
   try {
     const request = JSON.parse(event?.postData?.contents || '{}');
     authorize_(request.token);
-    validateTarget_(request);
+    validateRequest_(request);
     lock.waitLock(10000);
     const book = SpreadsheetApp.openById(TRPG_SPREADSHEET_ID);
+    if (request.action === 'readPendingCommands') {
+      const commandSheet = book.getSheetByName(TRPG_COMMAND_SHEET);
+      if (!commandSheet) throw new Error('TRPG_COMMANDS 탭을 찾을 수 없습니다.');
+      return json_({ ok: true, commands: pendingCommands_(commandSheet) });
+    }
+    if (request.action === 'updateCommandStatus') {
+      const commandSheet = book.getSheetByName(TRPG_COMMAND_SHEET);
+      if (!commandSheet) throw new Error('TRPG_COMMANDS 탭을 찾을 수 없습니다.');
+      return json_(updateCommandStatus_(commandSheet, request));
+    }
     if (request.action === 'upsertCharacter') {
       const characterSheet = book.getSheetByName(TRPG_CHARACTER_SHEET);
       if (!characterSheet) throw new Error('TRPG_CHARACTERS 탭을 찾을 수 없습니다.');
@@ -62,12 +72,49 @@ function authorize_(token) {
   if (!token || token !== expected) throw new Error('쓰기 토큰이 올바르지 않습니다.');
 }
 
-function validateTarget_(request) {
+function validateRequest_(request) {
   if (request.spreadsheetId !== TRPG_SPREADSHEET_ID) throw new Error('허용되지 않은 스프레드시트입니다.');
   const expectedSheet = request.action === 'upsertCharacter' ? TRPG_CHARACTER_SHEET : TRPG_COMMAND_SHEET;
   if (request.sheetName !== expectedSheet) throw new Error('허용되지 않은 시트 탭입니다.');
+  if (['readPendingCommands', 'updateCommandStatus'].includes(request.action)) {
+    if (request.action === 'updateCommandStatus' && !String(request.commandId || '').trim()) throw new Error('command_id가 필요합니다.');
+    return;
+  }
   const id = String(request.characterId || '').trim();
   if (!/^character_[a-z0-9_]+$/i.test(id)) throw new Error('캐릭터 ID 형식이 올바르지 않습니다.');
+}
+
+function pendingCommands_(sheet) {
+  const values = sheet.getDataRange().getDisplayValues();
+  if (!values.length) return [];
+  const headers = values[0].map(value => String(value).trim());
+  const statusColumn = headers.indexOf('status');
+  if (statusColumn < 0) throw new Error('status 열을 찾을 수 없습니다.');
+  return values.slice(1).filter(row => {
+    const status = String(row[statusColumn] || 'pending').trim().toLowerCase();
+    return !status || status === 'pending';
+  }).map(row => Object.fromEntries(headers.map((header, index) => [header, row[index] || ''])));
+}
+
+function updateCommandStatus_(sheet, request) {
+  const allowed = ['processing', 'applied', 'failed'];
+  const nextStatus = String(request.status || '').trim().toLowerCase();
+  if (!allowed.includes(nextStatus)) throw new Error('허용되지 않은 status입니다.');
+  const values = sheet.getDataRange().getDisplayValues();
+  const headers = values[0] || [];
+  const idColumn = headers.indexOf('command_id');
+  const statusColumn = headers.indexOf('status');
+  const resultColumn = headers.indexOf('result_json');
+  const processedColumn = headers.indexOf('processed_at');
+  if ([idColumn, statusColumn, resultColumn, processedColumn].some(index => index < 0)) throw new Error('명령 결과 열 구성이 올바르지 않습니다.');
+  const commandId = String(request.commandId).trim();
+  const rowIndex = values.findIndex((row, index) => index > 0 && String(row[idColumn]).trim() === commandId);
+  if (rowIndex < 0) throw new Error('command_id를 찾을 수 없습니다.');
+  const sheetRow = rowIndex + 1;
+  sheet.getRange(sheetRow, statusColumn + 1).setValue(nextStatus);
+  sheet.getRange(sheetRow, resultColumn + 1).setValue(JSON.stringify(request.result || {}));
+  sheet.getRange(sheetRow, processedColumn + 1).setValue(['applied', 'failed'].includes(nextStatus) ? (request.processedAt || new Date().toISOString()) : '');
+  return { ok: true, commandId, status: nextStatus };
 }
 
 function upsertCharacter_(sheet, request) {
