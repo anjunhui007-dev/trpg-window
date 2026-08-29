@@ -9,7 +9,7 @@ const CONFIG = Object.freeze({
 
 const COMMAND_HEADERS = ['command_id', 'character_id', 'command_type', 'payload_json', 'created_at', 'status', 'result_json', 'processed_at', 'source'];
 const CHARACTER_HEADERS = ['character_id', 'name', 'level', 'title', 'created_at', 'updated_at', 'status', 'profile_json'];
-const GEMINI_COMMANDS = ['upsert_character', 'set_speakers', 'grant_equipment', 'grant_essence', 'grant_inventory', 'remove_inventory', 'award_experience', 'increase_stats', 'increase_special_stats', 'set_trait', 'set_state'];
+const GEMINI_COMMANDS = ['upsert_character', 'set_speakers', 'grant_equipment', 'grant_essence', 'grant_inventory', 'remove_inventory', 'award_experience', 'grant_gold', 'increase_stats', 'increase_special_stats', 'set_trait', 'set_state'];
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('TRPG Window')
@@ -30,6 +30,7 @@ function doPost(event) {
     validateRequest_(request);
     switch (request.action) {
       case 'geminiChat': return jsonResponse_(geminiChat_(request));
+      case 'openContainer': return jsonResponse_(geminiChat_(request));
       case 'readPendingCommands': return jsonResponse_(readPendingCommands_());
       case 'updateCommandStatus': return jsonResponse_(withScriptLock_(() => updateCommandStatus_(request)));
       case 'upsertCharacter': return jsonResponse_(withScriptLock_(() => upsertCharacter_(request)));
@@ -84,12 +85,13 @@ function authorize_(token) {
 }
 
 function validateRequest_(request) {
-  const actions = ['geminiChat', 'readPendingCommands', 'updateCommandStatus', 'upsertCharacter', 'previewCharacterCommands', 'deleteCharacterCommands'];
+  const actions = ['geminiChat', 'openContainer', 'readPendingCommands', 'updateCommandStatus', 'upsertCharacter', 'previewCharacterCommands', 'deleteCharacterCommands'];
   if (!actions.includes(request.action)) throw new Error('허용되지 않은 작업입니다.');
   if (request.spreadsheetId !== CONFIG.spreadsheetId) throw new Error('허용되지 않은 스프레드시트입니다.');
   const expectedSheet = request.action === 'upsertCharacter' ? CONFIG.characterSheet : CONFIG.commandSheet;
   if (request.sheetName !== expectedSheet) throw new Error('허용되지 않은 시트 탭입니다.');
   if (request.action === 'geminiChat' && !String(request.message || '').trim()) throw new Error('플레이어 메시지가 필요합니다.');
+  if (request.action === 'openContainer' && (!request.item || typeof request.item !== 'object')) throw new Error('개봉할 상자 정보가 필요합니다.');
   if (request.action === 'updateCommandStatus' && !String(request.commandId || '').trim()) throw new Error('command_id가 필요합니다.');
   if (['upsertCharacter', 'previewCharacterCommands', 'deleteCharacterCommands'].includes(request.action)) {
     const id = String(request.characterId || '').trim();
@@ -135,14 +137,19 @@ function geminiChat_(request) {
 function buildGeminiPrompt_(request) {
   const gmRules = String(request.gmRules || '기본 CHRONICLE 규칙을 따른다.').slice(0, 12000);
   const sheetRules = String(request.sheetRules || '').slice(0, 8000);
-  const context = JSON.stringify({ gameState: request.gameState || {}, recentHistory: Array.isArray(request.history) ? request.history.slice(-24) : [], playerMessage: String(request.message || '').slice(0, 4000) });
+  const openingContainer = request.action === 'openContainer';
+  const context = JSON.stringify({ gameState: request.gameState || {}, recentHistory: Array.isArray(request.history) ? request.history.slice(-24) : [], playerMessage: String(request.message || '').slice(0, 4000), openedContainer: openingContainer ? request.item : undefined });
   return [
     '당신은 중세 판타지 TRPG CHRONICLE의 공정하고 생생한 게임 마스터다.',
     '플레이어 선택의 결과를 서술하고 NPC의 성격과 장기기억을 일관되게 유지한다.',
     '플레이어의 대사나 선택을 대신 결정하지 않는다.',
     '위치와 지도는 자동으로 변경하지 않는다.',
     '상태가 실제로 변할 때만 commands를 만들고 게임 상태 전체를 덮어쓰지 않는다.',
+    '착용 가능한 무기·방어구·장신구는 반드시 grant_equipment로 지급하고 slot에 머리, 목, 어깨, 상의, 하의, 손, 발, 주무기, 보조무기, 장신구 중 하나를 넣는다. grant_inventory로 착용 장비를 지급하지 않는다.',
     '새 NPC는 upsert_character로 먼저 등록하고 같은 응답의 npc 메시지에서 동일한 id를 사용한다.',
+    openingContainer ? '플레이어가 openedContainer를 지금 개봉했다. 상자의 이름·등급·설명과 현재 레벨에 어울리는 보상을 반드시 1개 이상 생성한다.' : '',
+    openingContainer ? '상자 보상에는 grant_equipment, grant_essence, grant_inventory, award_experience, grant_gold만 사용한다. 상자 자체를 제거하는 명령은 만들지 않는다.' : '',
+    openingContainer ? 'messages에는 상자가 열리는 짧은 연출과 발견한 보상을 작성한다.' : '',
     '반드시 다른 설명 없이 JSON 객체 하나만 반환한다.',
     '응답 형식: {"messages":[{"type":"gm|npc|system","speakerId":"","speakerName":"","text":"","action":""}],"commands":[{"command_type":"명령","payload":{}}]}',
     '사용 가능한 명령: ' + GEMINI_COMMANDS.join(', '),
