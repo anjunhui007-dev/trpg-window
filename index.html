@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#17130f" />
+  <title>TRPG Window</title>
+  <link rel="stylesheet" href="styles.css?v=1" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">TRPG COMPANION</p>
+        <h1>CHRONICLE WINDOW</h1>
+      </div>
+      <button id="editBtn" class="icon-btn" type="button" aria-label="편집">✦</button>
+    </header>
+
+    <section class="scene-card">
+      <div class="section-head">
+        <div><span class="dot"></span>현재 장면</div>
+        <span id="locationText" class="muted">장소 미정</span>
+      </div>
+      <div id="sceneCharacters" class="portrait-row"></div>
+      <button id="addCharacterBtn" class="ghost-btn" type="button">＋ 등장인물 추가</button>
+    </section>
+
+    <section class="player-card">
+      <div class="player-head">
+        <div class="avatar" id="playerAvatar">?</div>
+        <div class="player-title">
+          <span class="muted">PLAYER</span>
+          <strong id="playerName">이름 없음</strong>
+          <span id="playerMeta">Lv. 1 · 모험가</span>
+        </div>
+      </div>
+      <div class="meters">
+        <div class="meter-line"><span>HP</span><div class="meter"><i id="hpBar"></i></div><b id="hpText">10 / 10</b></div>
+        <div class="meter-line"><span>SP</span><div class="meter"><i id="spBar"></i></div><b id="spText">10 / 10</b></div>
+      </div>
+    </section>
+
+    <nav class="tabs" aria-label="Companion sections">
+      <button class="tab active" data-tab="people">인물</button>
+      <button class="tab" data-tab="equipment">장비</button>
+      <button class="tab" data-tab="essence">정수</button>
+      <button class="tab" data-tab="map">지도</button>
+    </nav>
+
+    <section id="panel" class="panel"></section>
+  </main>
+
+  <dialog id="characterDialog">
+    <form id="characterForm" method="dialog" class="dialog-card">
+      <div class="dialog-head"><strong>등장인물 등록</strong><button value="cancel" class="icon-btn">×</button></div>
+      <label>이름<input name="name" maxlength="30" required /></label>
+      <label>한 줄 설명<input name="role" maxlength="50" placeholder="예: 경계심 많은 약초꾼" /></label>
+      <label>초상화 이미지 URL<input name="portrait" type="url" placeholder="https://…" /></label>
+      <label class="check"><input name="party" type="checkbox" /> 동료로 등록</label>
+      <button class="primary-btn" value="default">등록</button>
+    </form>
+  </dialog>
+
+  <dialog id="editDialog">
+    <form id="editForm" method="dialog" class="dialog-card">
+      <div class="dialog-head"><strong>플레이어 편집</strong><button value="cancel" class="icon-btn">×</button></div>
+      <label>이름<input name="name" maxlength="30" /></label>
+      <div class="two"><label>레벨<input name="level" type="number" min="1" max="999" /></label><label>등급/직업<input name="title" maxlength="30" /></label></div>
+      <div class="two"><label>HP<input name="hp" type="number" min="0" /></label><label>최대 HP<input name="maxHp" type="number" min="1" /></label></div>
+      <div class="two"><label>SP<input name="sp" type="number" min="0" /></label><label>최대 SP<input name="maxSp" type="number" min="1" /></label></div>
+      <label>현재 장소<input name="location" maxlength="60" /></label>
+      <button class="primary-btn" value="default">저장</button>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=1"></script>
+</body>
+</html>
