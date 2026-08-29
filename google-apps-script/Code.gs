@@ -11,6 +11,34 @@ const COMMAND_HEADERS = ['command_id', 'character_id', 'command_type', 'payload_
 const CHARACTER_HEADERS = ['character_id', 'name', 'level', 'title', 'created_at', 'updated_at', 'status', 'profile_json'];
 const GEMINI_COMMANDS = ['upsert_character', 'set_speakers', 'grant_equipment', 'grant_essence', 'grant_inventory', 'remove_inventory', 'award_experience', 'grant_gold', 'increase_stats', 'increase_special_stats', 'set_trait', 'set_state'];
 
+const CORE_GM_SYSTEM = [
+  '너는 장기 진행형 판타지 TRPG 「아르켈리온 크로니클」의 전용 Game Master다. 플레이어 외의 세계, NPC, 탐험, 전투, 판정, 성장, 경제와 UI 상태를 관리한다.',
+  '사용자의 행동과 대사를 대신 결정하거나 선택지를 강요하지 않는다. 자유 행동을 세계의 논리, 능력, 준비, 환경과 난이도로 공정하게 판정하며 대성공·성공·부분 성공·실패·큰 실패·예상 밖 결과가 가능하다.',
+  '확정된 인물·관계·장소·사건·효과·퀘스트·선택은 정사다. 변화에는 세계 안의 원인이 필요하고, 미발견 비밀은 조사 전 공개하지 않는다.',
+  '진행 중심으로 생생하되 간결하게 서술한다. 반복 행동은 시간·처치·피해·EXP·골드·전리품·사건을 압축 정산한다.',
+  '수치, 장비, 정수, 아이템, 위치 등 현재 사실은 gameState가 정본이다. longMemory는 사건·관계·단서용이며 상태와 충돌하면 gameState를 따른다.',
+  '세계의 실제 변화와 commands/UI 상태를 같은 턴에 일치시킨다. 실제 명령 없이 UI를 갱신했다고 주장하지 않는다.',
+  '일반 장비는 장착·해제·교체 가능하다. 장착 정수는 신전 의식·특수 마법·사건 등 세계 내부 방법 없이는 제거·교체할 수 없다.',
+  '플레이어 레벨에 맞춘 자동 스케일링은 없다. 위험과 보상, 희귀성과 강함은 실제 의미를 가져야 한다.'
+].join('\n');
+
+const FULL_GM_RULES = [
+  '세계: 아르켈리온은 대던전을 중심으로 모험가·상인·길드·마법 연구가 발달한 왕국이다. 대던전은 12층이며 30일마다 구조·몬스터·상자·기믹 일부가 재편된다.',
+  '시간: 대화·짧은 쇼핑·짧은 이동·일반 전투마다 Day를 올리지 않는다. 수면, 장거리 이동, 장기 작업·훈련처럼 상당한 시간이 흐를 때만 진행한다.',
+  '성장: 레벨 상한 70, 고정 EXP 표를 따른다. 전투 외에도 퀘스트·탐험·발견·업적·위험한 도전으로 EXP를 준다. 길드 등급은 F→E→D→C→B→A→S이며 레벨과 별개다.',
+  '정수: 몬스터·보스·상자·기믹·사건·전승·유물·발견으로 획득 가능하다. 이름, 일반→고급→희귀→영웅→전설→고유 희귀도, 설명, 기본/특수 스탯, 액티브, 패시브, 특수 효과를 가질 수 있다. 보통 액티브1+패시브1이나 개성을 우선해 1~3개 또는 다른 조합도 가능하다.',
+  '정수 슬롯: Lv1에 1개, 이후 3레벨마다 1개, Lv43에 최대 15개다. 융합하지 않는다. 열린 빈 슬롯에 장착하며 UI에서 해제·교체하지 못하고 세계 안의 정당한 제거 사건이 있어야 한다. 제거 시 파생 스킬도 사라진다.',
+  '특성: 인간족 고유 성장이다. title, description, mastery, maxMastery를 가지며 없으면 아직 개화하지 않음이다. 행동의 질·난이도·의미로 자연스럽게 개화·성장하며 반복만으로 무한 상승시키지 않는다.',
+  '스탯: 기본 스탯과 사건·장비·정수·유물·훈련·축복·저주 등에서 생기는 자유로운 특수 스탯이 있다. 임시 장비 보정과 영구 성장을 구분한다.',
+  '장비: 이름, 부위, 희귀도, 설명, 기본/특수 스탯, 특수 효과, 세트와 단계별 세트 효과를 가질 수 있다. 모든 장비가 세트일 필요는 없으며 효과는 전투·생존·탐험·제작·정수 시너지 등 다양하다.',
+  '아이템/경제: 장비 외 재료·포션·광석·약초·열쇠·퀘스트 물품·보물·유물을 인벤토리에 둔다. 통화는 G이며 중요한 증감은 보존한다. 평범한 전리품은 평범해도 되고 희귀한 것일수록 고유한 이름·설명·배경을 강화한다.',
+  '상자/파밍: 출처·장소·등급·조건에 따라 장비·정수·골드·재료·유물·특수 물품·사건을 낸다. 납득 가능한 꽝과 대박이 모두 가능하며 내용은 개봉 전에 공개하지 않는다.',
+  '몬스터/전투: 중요한 몬스터는 생태·패턴·공격·능력·약점·환경·정수 가능성을 가진다. 자유 행동 전투로 능력·상대·환경·준비·합리성을 판정한다. 캐릭터는 무적이 아니나 자의적 즉사는 피한다. HP는 생명력, SP는 기술·특수 행동 자원이다.',
+  'NPC/장면: 중요 NPC의 이름·역할·외형·성격·관계·기억·상태를 지속한다. 모든 행인을 등록하지 않는다. 응답에서 실제 발화한 NPC를 명확히 구분하고 중요 신규 인물은 upsert_character 및 set_speakers로 반영한다.',
+  '위치/UI: 실제 위치와 지역→도시→시설 계층을 유지하되 지도에 없는 곳도 허용한다. HP, SP, EXP, 레벨, 골드, Day, 길드 등급, 위치, 스탯, 특성, 장비/세트, 정수/스킬, 아이템, NPC, 관계와 퀘스트의 실제 변화를 명령으로 동기화한다.',
+  '운영 철학: 정답이 정해진 이야기가 아니다. 플레이어는 모험·파밍·경제·수집·관계·연구·기묘한 빌드·세계 비밀을 자유롭게 추구한다. 확정 규칙과 세계 상태를 존중해 장기간 일관된 세계를 운영한다.'
+].join('\n');
+
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('TRPG Window')
     .addItem('초기 설정 확인', 'setupTrpgWindow')
@@ -20,7 +48,7 @@ function onOpen() {
 }
 
 function doGet() {
-  return jsonResponse_({ ok: true, service: 'TRPG Window Bridge', model: CONFIG.geminiModel, version: '2.0.0' });
+  return jsonResponse_({ ok: true, service: 'TRPG Window Bridge', model: CONFIG.geminiModel, version: '2.1.0' });
 }
 
 function doPost(event) {
@@ -109,6 +137,7 @@ function geminiChat_(request) {
     headers: { 'x-goog-api-key': apiKey },
     muteHttpExceptions: true,
     payload: JSON.stringify({
+      systemInstruction: { parts: [{ text: CORE_GM_SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: buildGeminiPrompt_(request) }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.85, maxOutputTokens: 4096 }
     })
@@ -130,19 +159,20 @@ function geminiChat_(request) {
   catch (error) { throw new Error('Gemini 응답 JSON을 해석할 수 없습니다.'); }
   const messages = (Array.isArray(result.messages) ? result.messages : []).slice(0, 12).map(normalizeGeminiMessage_).filter(message => message.text || message.action);
   const commands = (Array.isArray(result.commands) ? result.commands : []).map(normalizeGeminiCommand_).filter(command => GEMINI_COMMANDS.includes(command.command_type)).slice(0, 20);
+  const memoryUpdate = result.memoryUpdate && typeof result.memoryUpdate === 'object' ? normalizeMemory_(result.memoryUpdate) : null;
   if (!messages.length && !commands.length) throw new Error('Gemini 응답에 표시할 메시지나 적용할 명령이 없습니다.');
-  return { ok: true, model: CONFIG.geminiModel, messages, commands };
+  return { ok: true, model: CONFIG.geminiModel, messages, commands, memoryUpdate };
 }
 
 function buildGeminiPrompt_(request) {
-  const gmRules = String(request.gmRules || '기본 CHRONICLE 규칙을 따른다.').slice(0, 12000);
+  const gmRules = String(request.gmRules || '').slice(0, 6000);
   const sheetRules = String(request.sheetRules || '').slice(0, 8000);
   const openingContainer = request.action === 'openContainer';
-  const context = JSON.stringify({ gameState: request.gameState || {}, recentHistory: Array.isArray(request.history) ? request.history.slice(-24) : [], playerMessage: String(request.message || '').slice(0, 4000), openedContainer: openingContainer ? request.item : undefined });
+  const summaryDue = request.summaryDue === true;
+  const context = JSON.stringify({ gameState: request.gameState || {}, longMemory: request.longMemory || {}, recentHistory: Array.isArray(request.history) ? request.history.slice(-10) : [], playerMessage: String(request.message || '').slice(0, 4000), openedContainer: openingContainer ? request.item : undefined });
   return [
-    '당신은 중세 판타지 TRPG CHRONICLE의 공정하고 생생한 게임 마스터다.',
-    '플레이어 선택의 결과를 서술하고 NPC의 성격과 장기기억을 일관되게 유지한다.',
-    '플레이어의 대사나 선택을 대신 결정하지 않는다.',
+    request.fullRulesDue === true ? '[장기 상세 규칙 재점검]\n' + FULL_GM_RULES : '',
+    gmRules ? '[사용자 추가 GM 규칙]\n' + gmRules : '',
     '위치와 지도는 자동으로 변경하지 않는다.',
     '상태가 실제로 변할 때만 commands를 만들고 게임 상태 전체를 덮어쓰지 않는다.',
     '착용 가능한 무기·방어구·장신구는 반드시 grant_equipment로 지급하고 slot에 머리, 목, 어깨, 상의, 하의, 손, 발, 주무기, 보조무기, 장신구 중 하나를 넣는다. grant_inventory로 착용 장비를 지급하지 않는다.',
@@ -150,13 +180,31 @@ function buildGeminiPrompt_(request) {
     openingContainer ? '플레이어가 openedContainer를 지금 개봉했다. 상자의 이름·등급·설명과 현재 레벨에 어울리는 보상을 반드시 1개 이상 생성한다.' : '',
     openingContainer ? '상자 보상에는 grant_equipment, grant_essence, grant_inventory, award_experience, grant_gold만 사용한다. 상자 자체를 제거하는 명령은 만들지 않는다.' : '',
     openingContainer ? 'messages에는 상자가 열리는 짧은 연출과 발견한 보상을 작성한다.' : '',
+    summaryDue ? '이번 응답에서는 기존 longMemory와 최근 대화를 병합해 memoryUpdate를 반드시 작성한다. 확정 사건·현재 목표·관계·미해결 단서·지속 결과만 보존하고 추측, 사소한 로그, gameState 수치를 넣지 않는다.' : '이번 응답에서는 memoryUpdate를 null로 둔다.',
     '반드시 다른 설명 없이 JSON 객체 하나만 반환한다.',
-    '응답 형식: {"messages":[{"type":"gm|npc|system","speakerId":"","speakerName":"","text":"","action":""}],"commands":[{"command_type":"명령","payload":{}}]}',
+    '응답 형식: {"messages":[{"type":"gm|npc|system","speakerId":"","speakerName":"","text":"","action":""}],"commands":[{"command_type":"명령","payload":{}}],"memoryUpdate":null 또는 {"storySummary":"","currentObjectives":[],"confirmedFacts":[],"unresolvedClues":[],"relationships":{},"lastingConsequences":[]}}',
     '사용 가능한 명령: ' + GEMINI_COMMANDS.join(', '),
-    'GM 규칙: ' + gmRules,
     '시트/명령 규칙: ' + sheetRules,
     '현재 입력: ' + context
   ].join('\n\n');
+}
+
+function normalizeMemory_(memory) {
+  const strings = value => (Array.isArray(value) ? value : []).map(item => String(item).slice(0, 500)).slice(0, 30);
+  const source = memory.relationships && typeof memory.relationships === 'object' && !Array.isArray(memory.relationships) ? memory.relationships : {};
+  const relationships = {};
+  Object.keys(source).slice(0, 30).forEach(key => {
+    const value = source[key];
+    relationships[String(key).slice(0, 100)] = String(typeof value === 'string' ? value : JSON.stringify(value || {})).slice(0, 2000);
+  });
+  return {
+    storySummary: String(memory.storySummary || '').slice(0, 4000),
+    currentObjectives: strings(memory.currentObjectives),
+    confirmedFacts: strings(memory.confirmedFacts),
+    unresolvedClues: strings(memory.unresolvedClues),
+    relationships: JSON.parse(JSON.stringify(relationships).slice(0, 6000) || '{}'),
+    lastingConsequences: strings(memory.lastingConsequences)
+  };
 }
 
 function normalizeGeminiMessage_(message) {
