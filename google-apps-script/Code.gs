@@ -176,6 +176,7 @@ function buildGeminiPrompt_(request) {
     '위치와 지도는 자동으로 변경하지 않는다.',
     '상태가 실제로 변할 때만 commands를 만들고 게임 상태 전체를 덮어쓰지 않는다.',
     '착용 가능한 무기·방어구·장신구는 반드시 grant_equipment로 지급하고 slot에 머리, 목, 어깨, 상의, 하의, 손, 발, 주무기, 보조무기, 장신구 중 하나를 넣는다. grant_inventory로 착용 장비를 지급하지 않는다.',
+    '보상 명령 payload는 중첩하지 않는다. grant_equipment payload={id,name,description,grade,slot,stats,specialStats,set}, grant_essence payload={id,name,description,grade,stats,specialStats,activeSkills,passiveSkills}, grant_inventory payload={id,name,description,grade,type,quantity,effect,usable} 형식을 사용한다.',
     '새 NPC는 upsert_character로 먼저 등록하고 같은 응답의 npc 메시지에서 동일한 id를 사용한다.',
     openingContainer ? '플레이어가 openedContainer를 지금 개봉했다. 상자의 이름·등급·설명과 현재 레벨에 어울리는 보상을 반드시 1개 이상 생성한다.' : '',
     openingContainer ? '상자 보상에는 grant_equipment, grant_essence, grant_inventory, award_experience, grant_gold만 사용한다. 상자 자체를 제거하는 명령은 만들지 않는다.' : '',
